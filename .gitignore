@@ -14,3 +14,9 @@ wheels/
 
 # Extra files / trash directory
 trash/
+
+# Celery Beat schedule files
+celerybeat-schedule*
+*.bak
+*.dat
+*.dir
