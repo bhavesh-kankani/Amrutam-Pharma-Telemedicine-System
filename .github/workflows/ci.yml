@@ -58,7 +58,7 @@ jobs:
 
       - name: Static Code Analysis (Ruff)
         run: |
-          ruff check backend/
+          ruff check backend/ --ignore EXE001
 
       - name: Security Vulnerability Scan (Bandit)
         run: |

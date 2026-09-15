@@ -297,7 +297,7 @@ uvx bandit -r backend/ -x "backend/accounts/tests.py,backend/consultations/tests
 
 ### GitHub Actions CI Workflow (`.github/workflows/ci.yml`)
 Automated pipeline executes on every push and pull request:
-1. **Lint**: `uvx ruff check backend/`
+1. **Lint**: `uvx ruff check backend/ --ignore EXE001`
 2. **Security Scan**: `uvx bandit -r backend/`
 3. **Database Setup**: Boots ephemeral PostgreSQL 16 & Redis 7.2 services
 4. **Test Suite**: Runs `uv run --directory backend python manage.py test` (43/43 tests passing)

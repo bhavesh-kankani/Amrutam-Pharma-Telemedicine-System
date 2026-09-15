@@ -44,4 +44,5 @@ ignore = [
     "SIM102",  # Nested if
     "SIM117",  # Nested with
     "RUF013",  # Implicit optional
+    "EXE001",  # Shebang on non-executable file (Windows/Linux checkout discrepancies)
 ]
