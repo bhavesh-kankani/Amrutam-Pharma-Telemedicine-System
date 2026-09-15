@@ -20,3 +20,9 @@ celerybeat-schedule*
 *.bak
 *.dat
 *.dir
+
+# gunicorn files
+backend/.gunicorn/
+*.ctl
+*.sock
+*.pid

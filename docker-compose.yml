@@ -6,6 +6,7 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  static_volume:
 
 services:
   db:
@@ -13,7 +14,7 @@ services:
     container_name: amrutam_db
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${DB_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${DB_NAME:-amrutam}
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -53,6 +54,7 @@ services:
     restart: unless-stopped
     command: >
       sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
              gunicorn backend.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2"
     ports:
       - "8000:8000"
@@ -60,9 +62,13 @@ services:
       - .env
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/1
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+      - static_volume:/app/staticfiles
     depends_on:
       db:
         condition: service_healthy
@@ -82,9 +88,12 @@ services:
       - .env
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/1
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
     depends_on:
       db:
         condition: service_healthy
@@ -104,9 +113,12 @@ services:
       - .env
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/1
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
     depends_on:
       db:
         condition: service_healthy

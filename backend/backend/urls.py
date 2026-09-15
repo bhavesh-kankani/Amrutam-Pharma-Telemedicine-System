@@ -1,5 +1,8 @@
+from django.conf import settings
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, re_path, include
+from django.views.static import serve
+from django.shortcuts import redirect
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -49,4 +52,8 @@ urlpatterns = [
     path("api/v1/payments/webhook/", PaymentWebhookAPIView.as_view(), name="payment-webhook"),
     # Admin Analytics API v1
     path("api/v1/admin/", include("analytics.urls")),
+]
+
+urlpatterns += [
+    re_path(r"^static/(?P<path>.*)$", serve, {"document_root": settings.STATIC_ROOT}),
 ]

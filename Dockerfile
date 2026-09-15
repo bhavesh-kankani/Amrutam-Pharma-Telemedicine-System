@@ -43,7 +43,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY backend/ /app/
 
 # Create unprivileged system user for HIPAA/PCI security compliance
-RUN groupadd -r amrutam && useradd -r -g amrutam -d /app -s /sbin/nologin amrutam \
+RUN mkdir -p /app/staticfiles \
+    && groupadd -r amrutam && useradd -r -g amrutam -d /app -s /sbin/nologin amrutam \
     && chown -R amrutam:amrutam /app
 
 USER amrutam
