@@ -62,9 +62,9 @@ jobs:
 
       - name: Security Vulnerability Scan (Bandit)
         run: |
-          bandit -r backend/ -x backend/*/tests.py
+          bandit -r backend/ -x "backend/accounts/tests.py,backend/consultations/tests.py,backend/analytics/tests.py,backend/compliance/tests.py"
 
-      - name: Run Full Automated Test Suite (38 Tests)
+      - name: Run Full Automated Test Suite (43 Tests)
         env:
           DB_NAME: amrutam_test
           DB_USER: postgres
