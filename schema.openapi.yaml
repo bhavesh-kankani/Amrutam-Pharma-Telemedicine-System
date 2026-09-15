@@ -1,0 +1,836 @@
+openapi: 3.0.3
+info:
+  title: Amrutam Telemedicine Backend API
+  version: 1.0.0
+  description: Production-grade telemedicine backend with PII encryption, optimistic
+    concurrency holds, Redis idempotency, and Celery async workers.
+paths:
+  /api/v1/admin/analytics/:
+    get:
+      operationId: api_v1_admin_analytics_retrieve
+      description: Returns aggregated platform metrics including daily consultation
+        volume with 100k target progress, all-time consultation count, Gross Transaction
+        Value (GTV), doctor-to-slot ratios, slot status breakdowns, and p95 SLA diagnostic
+        targets.
+      summary: Retrieve Aggregated Admin Analytics
+      tags:
+      - Admin Analytics
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAnalyticsResponse'
+          description: ''
+  /api/v1/auth/mfa/setup/:
+    post:
+      operationId: api_v1_auth_mfa_setup_create
+      description: Generates an RFC 6238 Base32 secret, an otpauth:// provisioning
+        URI for authenticator apps, and 5 emergency recovery scratch codes.
+      summary: Setup Two-Factor Authentication (TOTP)
+      tags:
+      - Authentication
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFASetupResponse'
+          description: ''
+  /api/v1/auth/mfa/verify/:
+    post:
+      operationId: api_v1_auth_mfa_verify_create
+      description: Validates a 6-digit TOTP token against the pending secret and enables
+        MFA on the user account.
+      summary: Verify & Activate Two-Factor Authentication
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFAVerifyRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MFAVerifyRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MFAVerifyRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          description: MFA successfully activated.
+        '400':
+          description: Invalid or expired verification token.
+  /api/v1/bookings/confirm/:
+    post:
+      operationId: api_v1_bookings_confirm_create
+      description: Validates that the slot is actively held by caller, creates Consultation
+        and records Payment ledger entry with optional transaction reference.
+      summary: Confirm Booking & Record Payment
+      tags:
+      - Bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmBookingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConfirmBookingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConfirmBookingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          description: Booking confirmed and Consultation created.
+        '400':
+          description: Invalid request or expired hold window.
+  /api/v1/bookings/hold/:
+    post:
+      operationId: api_v1_bookings_hold_create
+      description: Atomically holds an available or expired slot for 5 minutes, bound
+        to the authenticated patient.
+      summary: Place Explicit 5-Minute Hold on Slot
+      tags:
+      - Bookings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldSlotRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HoldSlotRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HoldSlotRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          description: Slot held successfully for 5 minutes.
+        '400':
+          description: Validation error (e.g. doctor booking self).
+        '409':
+          description: 'Conflict: Slot is actively being booked by another patient.'
+  /api/v1/consultations/{id}/:
+    get:
+      operationId: api_v1_consultations_retrieve
+      description: Retrieves comprehensive details of a consultation, including doctor
+        details, slot info, and issued prescriptions.
+      summary: Retrieve Consultation Details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Consultations
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationDetail'
+          description: ''
+  /api/v1/doctors/:
+    get:
+      operationId: api_v1_doctors_list
+      description: Search and filter verified doctors by specialization (case-insensitive
+        substring), fee range (min_fee, max_fee), and availability_date.
+      summary: List & Filter Verified Doctors
+      parameters:
+      - in: query
+        name: availability_date
+        schema:
+          type: string
+          format: date
+        description: Filter doctors who have active available slots on the specified
+          date (YYYY-MM-DD)
+      - in: query
+        name: max_fee
+        schema:
+          type: number
+        description: Filter doctors with consultation fee less than or equal to this
+          amount
+      - in: query
+        name: min_fee
+        schema:
+          type: number
+        description: Filter doctors with consultation fee greater than or equal to
+          this amount
+      - in: query
+        name: specialization
+        schema:
+          type: string
+        description: Search doctors by specialization (case-insensitive substring
+          and term variants)
+      tags:
+      - Doctors
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Doctor'
+          description: ''
+  /api/v1/payments/webhook/:
+    post:
+      operationId: api_v1_payments_webhook_create
+      description: Receives payment gateway notifications and enqueues Celery background
+        task for asynchronous verification and consultation scheduling.
+      summary: Receive Payment Webhook Event
+      tags:
+      - Payments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentWebhookRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PaymentWebhookRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PaymentWebhookRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: Webhook acknowledged.
+  /api/v1/prescriptions/:
+    post:
+      operationId: api_v1_prescriptions_create
+      description: Creates an immutable digital prescription and schedules Celery
+        task for PDF generation.
+      summary: Create Digital Medical Prescription
+      tags:
+      - Prescriptions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrescriptionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PrescriptionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PrescriptionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prescription'
+          description: ''
+  /api/v1/slots/:
+    get:
+      operationId: api_v1_slots_list
+      description: List doctor availability slots with real-time dynamic display status
+        (AVAILABLE, UNDER_BOOKING, BOOKED) and remaining seconds.
+      summary: List Availability Slots
+      parameters:
+      - in: query
+        name: doctor
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - available
+          - booked
+          - hold
+          - locked
+        description: |-
+          * `available` - Available
+          * `hold` - Hold
+          * `locked` - Locked
+          * `booked` - Booked
+      tags:
+      - Availability Slots
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailabilitySlot'
+          description: ''
+  /api/v1/token/:
+    post:
+      operationId: api_v1_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPairRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/v1/token/refresh/:
+    post:
+      operationId: api_v1_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/token/verify/:
+    post:
+      operationId: api_v1_token_verify_create
+      description: |-
+        Takes a token and indicates if it is valid.  This view provides no
+        information about a token's fitness for a particular use.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /healthz/:
+    get:
+      operationId: healthz_retrieve
+      description: Liveness probe verifying that the application process is running.
+      summary: Liveness Probe
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: Process is alive.
+  /readyz/:
+    get:
+      operationId: readyz_retrieve
+      description: Readiness probe validating connectivity to PostgreSQL database
+        and Redis cache.
+      summary: Readiness Probe
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: All upstream dependencies are healthy and ready.
+        '503':
+          description: One or more dependencies are degraded or unreachable.
+components:
+  schemas:
+    AdminAnalyticsResponse:
+      type: object
+      properties:
+        daily_consultation_volume:
+          $ref: '#/components/schemas/DailyConsultationVolume'
+        total_consultations:
+          type: integer
+          description: All-time consultation count
+        gross_transaction_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Total sum of successful payments
+        doctor_to_slot_ratio:
+          $ref: '#/components/schemas/DoctorToSlotRatio'
+        slot_breakdown:
+          $ref: '#/components/schemas/SlotBreakdown'
+        p95_latency_summary:
+          $ref: '#/components/schemas/P95LatencySummary'
+      required:
+      - daily_consultation_volume
+      - doctor_to_slot_ratio
+      - gross_transaction_value
+      - p95_latency_summary
+      - slot_breakdown
+      - total_consultations
+    AvailabilitySlot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        doctor:
+          type: string
+          format: uuid
+        doctor_email:
+          type: string
+          format: email
+          readOnly: true
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/AvailabilitySlotStatusEnum'
+        display_status:
+          type: string
+          readOnly: true
+        remaining_seconds:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - display_status
+      - doctor
+      - doctor_email
+      - end_time
+      - id
+      - remaining_seconds
+      - start_time
+    AvailabilitySlotStatusEnum:
+      enum:
+      - available
+      - hold
+      - locked
+      - booked
+      type: string
+      description: |-
+        * `available` - Available
+        * `hold` - Hold
+        * `locked` - Locked
+        * `booked` - Booked
+    ConfirmBookingRequest:
+      type: object
+      properties:
+        slot_id:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 255
+        payment_status:
+          allOf:
+          - $ref: '#/components/schemas/PaymentStatusEnum'
+          default: success
+        transaction_reference_number:
+          type: string
+          nullable: true
+          maxLength: 255
+      required:
+      - amount
+      - idempotency_key
+      - slot_id
+    ConsultationDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        patient:
+          type: string
+          format: uuid
+        doctor:
+          type: string
+          format: uuid
+        slot:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ConsultationDetailStatusEnum'
+        meeting_link:
+          type: string
+          nullable: true
+          maxLength: 255
+        prescriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prescription'
+          readOnly: true
+      required:
+      - doctor
+      - id
+      - patient
+      - prescriptions
+      - slot
+    ConsultationDetailStatusEnum:
+      enum:
+      - scheduled
+      - in_progress
+      - completed
+      - cancelled
+      type: string
+      description: |-
+        * `scheduled` - Scheduled
+        * `in_progress` - In Progress
+        * `completed` - Completed
+        * `cancelled` - Cancelled
+    DailyConsultationVolume:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Consultations created today
+        target:
+          type: integer
+          description: Target volume (100,000)
+        progress_percentage:
+          type: number
+          format: double
+          description: Percentage completed toward target
+      required:
+      - count
+      - progress_percentage
+      - target
+    Doctor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        specialization:
+          type: string
+          maxLength: 100
+        license_number:
+          type: string
+          maxLength: 100
+        consultation_fee:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        is_verified:
+          type: boolean
+      required:
+      - consultation_fee
+      - email
+      - id
+      - license_number
+      - specialization
+    DoctorToSlotRatio:
+      type: object
+      properties:
+        verified_doctors:
+          type: integer
+          description: Count of active verified doctors
+        active_slots_today:
+          type: integer
+          description: Active available slots scheduled for today
+        ratio:
+          type: number
+          format: double
+          description: Ratio of verified doctors to active available slots
+      required:
+      - active_slots_today
+      - ratio
+      - verified_doctors
+    EventEnum:
+      enum:
+      - payment.success
+      - payment.failed
+      - payment.refunded
+      type: string
+      description: |-
+        * `payment.success` - payment.success
+        * `payment.failed` - payment.failed
+        * `payment.refunded` - payment.refunded
+    HoldSlotRequest:
+      type: object
+      properties:
+        slot_id:
+          type: string
+          format: uuid
+      required:
+      - slot_id
+    MFASetupResponse:
+      type: object
+      properties:
+        secret:
+          type: string
+        otpauth_uri:
+          type: string
+        recovery_codes:
+          type: array
+          items:
+            type: string
+        instructions:
+          type: string
+      required:
+      - instructions
+      - otpauth_uri
+      - recovery_codes
+      - secret
+    MFAVerifyRequestRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 6
+          maxLength: 6
+      required:
+      - token
+    P95LatencySummary:
+      type: object
+      properties:
+        p95_read_target_ms:
+          type: integer
+          description: p95 SLA read latency in milliseconds
+        p95_write_target_ms:
+          type: integer
+          description: p95 SLA write latency in milliseconds
+        daily_scale_capacity:
+          type: integer
+          description: Daily scaling throughput target
+      required:
+      - daily_scale_capacity
+      - p95_read_target_ms
+      - p95_write_target_ms
+    PaymentStatusEnum:
+      enum:
+      - success
+      - failed
+      - refunded
+      type: string
+      description: |-
+        * `success` - success
+        * `failed` - failed
+        * `refunded` - refunded
+    PaymentWebhookRequest:
+      type: object
+      properties:
+        event:
+          $ref: '#/components/schemas/EventEnum'
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 255
+        slot_id:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        failure_reason:
+          type: string
+      required:
+      - event
+      - idempotency_key
+    Prescription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        consultation:
+          type: string
+          format: uuid
+        medications: {}
+        notes:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - consultation
+      - id
+      - issued_at
+    PrescriptionRequest:
+      type: object
+      properties:
+        consultation:
+          type: string
+          format: uuid
+        medications: {}
+        notes:
+          type: string
+      required:
+      - consultation
+    SlotBreakdown:
+      type: object
+      properties:
+        available:
+          type: integer
+          description: Total available slots
+        locked:
+          type: integer
+          description: Total held/locked slots
+        booked:
+          type: integer
+          description: Total booked slots
+      required:
+      - available
+      - booked
+      - locked
+    TokenObtainPair:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    TokenObtainPairRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - refresh
+    TokenVerifyRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - token
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

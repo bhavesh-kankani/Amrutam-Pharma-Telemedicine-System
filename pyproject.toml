@@ -1,0 +1,47 @@
+[project]
+name = "amrutam-pharma"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.6.3",
+    "cryptography>=43.0.0",
+    "django>=6.1.1",
+    "django-extensions>=4.1",
+    "django-filter>=26.1",
+    "django-prometheus>=2.4.0",
+    "django-redis>=7.0.0",
+    "djangorestframework>=3.15.0",
+    "djangorestframework-simplejwt>=5.5.1",
+    "drf-spectacular>=0.30.0",
+    "gunicorn>=26.2.0",
+    "psycopg[binary]>=3.2.0",
+    "python-dotenv>=1.0.1",
+    "redis>=8.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "django-extensions>=4.1",
+    "locust>=2.46.5",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+ignore = [
+    "E501",    # Line too long
+    "RUF012",  # Mutable class attributes in Django/DRF
+    "BLE001",  # Blind exception
+    "I001",    # Import order
+    "E402",    # Module level import not at top of file
+    "UP017",   # UTC timezone alias
+    "W292",    # Missing newline at end of file
+    "B008",    # Do not perform function call in argument defaults
+    "SIM102",  # Nested if
+    "SIM117",  # Nested with
+    "RUF013",  # Implicit optional
+]

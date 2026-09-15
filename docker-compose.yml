@@ -1,0 +1,114 @@
+networks:
+  amrutam:
+    name: amrutam
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: amrutam_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-amrutam}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - amrutam
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d amrutam"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: amrutam_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - amrutam
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: amrutam_web
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn backend.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2"
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amrutam
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: amrutam_celery_worker
+    restart: unless-stopped
+    command: celery -A backend worker -l INFO -c 4
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amrutam
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: amrutam_celery_beat
+    restart: unless-stopped
+    command: celery -A backend beat -l INFO
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amrutam

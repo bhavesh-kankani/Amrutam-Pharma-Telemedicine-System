@@ -1,0 +1,81 @@
+name: Production CI Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  audit-and-test:
+    name: Lint, Audit & Test Suite
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: amrutam_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install uv Package Manager
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: |
+          uv pip install --system -r requirements.txt
+          uv pip install --system ruff bandit
+
+      - name: Static Code Analysis (Ruff)
+        run: |
+          ruff check backend/
+
+      - name: Security Vulnerability Scan (Bandit)
+        run: |
+          bandit -r backend/ -x backend/*/tests.py
+
+      - name: Run Full Automated Test Suite (38 Tests)
+        env:
+          DB_NAME: amrutam_test
+          DB_USER: postgres
+          DB_PASSWORD: postgrespassword
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          REDIS_URL: redis://127.0.0.1:6379/1
+          CELERY_BROKER_URL: redis://127.0.0.1:6379/0
+          CELERY_RESULT_BACKEND: redis://127.0.0.1:6379/0
+          SECRET_KEY: ci-secret-test-key-amrutam-telemedicine
+          FIELD_ENCRYPTION_KEY: ${{ secrets.FIELD_ENCRYPTION_KEY || 'k8ZfBv9mZ_8k0H6rB2qT4yW6eR8uI0oP2aS4dF6gH8j=' }}
+        run: |
+          cd backend
+          python manage.py test --noinput
