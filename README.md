@@ -124,12 +124,19 @@ uv run --directory backend python seed_data.py
 # Start Django development server
 uv run --directory backend python manage.py runserver 127.0.0.1:8000
 
-# Start Celery asynchronous worker
+# Start Celery asynchronous worker (Linux / macOS / Production Docker)
 uv run --directory backend celery -A backend worker -l info
 
 # Start Celery Beat periodic scheduler (60s hold sweeper)
 uv run --directory backend celery -A backend beat -l info
 ```
+
+> [!NOTE]
+> **Windows Local Development Note (Celery Worker Pool)**:  
+> Due to a known limitation in Windows process-spawn handling with Celery's default `prefork` pool (`billiard` `WinError 5` / `WinError 6`), run the local development worker with the `solo` execution pool on native Windows:
+> ```powershell
+> uv run --directory backend celery -A backend worker --pool=solo -l info
+> ```
 
 ---
 
